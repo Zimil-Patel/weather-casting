@@ -1,0 +1,44 @@
+Tools and libraries:
+
+
+Tailwind CSS for universal visual design
+React native hero icon - npm i react-native-heroicons react-native-svg
+heroicons.com (solid, mini, outline icons) on this website
+react-native-progress - (show loading progress in application)
+npm i react-native-async-storage/async-storage - (store in local storage)
+weaterapi.com
+
+
+Steps 1: setup create new project
+
+-> Check for node
+node -v
+npm -v
+
+-> install if not
+npm install -g npm
+
+
+->  Install Expo CLI
+npm install -g expo-cli
+
+
+-> Verify Expo
+expo --version
+
+
+-> Create project
+expo init weater-cast
+
+-> Navigate and start project
+- cd .\weather-cast\
+- npm run android
+
+-> Libraries for navigation
+npm install @react-navigation/native react-native-screens react-native-safe-area-context react-native-gesture-handler react-native-reanimated react-native-vector-icons
+npm install @react-navigation/stack
+
+
+-> get free weather api check for its json data
+
+-> use axios (axios.request({method, url}))

@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, TextInput, StatusBar, Image, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
+import { debounce } from 'lodash';
+import { fetchLocationsData, fetchForecastData } from '../api/weather';
+import { weatherImages } from '../constants/constants';
+import * as Progress from 'react-native-progress';
+import { getData, storeData } from '../helper/asyncStorage';
 
 export const theme = {
   bgWhite: (opacity) => `rgba(255, 255, 255, ${opacity})`,
@@ -11,13 +16,81 @@ export const theme = {
 
 export default function HomeScreen({ navigation }) {
 
+
+  // call before application interface building get started
+  useEffect(()=>{
+
+    fetchMyWeatherData();
+
+  },[]);
+
+  // SET DEAULT DATA OR SET USER PREFERENCED DATA FROM ASYNC STORAGE
+  const fetchMyWeatherData = async () => {
+
+    let cityName = "Surat";
+    let myCity = await getData('city');
+    if (myCity) cityName = myCity;
+
+    fetchForecastData({cityName: cityName, days: '7'}).then(data => {
+      setWeather(data);
+      setLoading(false);
+    });
+  };
+
   const [showSearch, toggleSearch] = useState(false);
-  const [locations, setLocations] = useState([1, 2, 3]);
+  const [locations, setLocations] = useState([]);
+  const [weather, setWeather] = useState({});
+  const [loading, setLoading] = useState(true);
+  const { current, location, forecast } = weather;
+
+
+  const toggleSearchSection = () => {
+
+    if (showSearch == false) {
+      setLocations([]);
+    }
+
+    toggleSearch(!showSearch);
+  };
 
   // EVENT WHEN USER PRESS ON SEARCH RESULT
   const handleLocation = (loc) => {
-    console.log("location: ", loc);
+    // console.log("location: ", loc);
+    setLocations([]);
+    toggleSearch(false);
+    setLoading(true);
+    // fetch data for perticular location
+    fetchForecastData({ cityName: loc.name, days: 7 }).then(
+      data => {
+        // console.log("Got Forecast: ", data);
+        setWeather(data);
+        setLoading(false);
+        storeData('city', loc.name);
+      }
+    );
+
   };
+
+  // HANDLE SEARCH EVENT WHEN USER START TYPING
+  const handleSearch = (val) => {
+    console.log("Search Value: ", val);
+
+    // Fetch Locations
+    if (val.length > 2) {
+      fetchLocationsData({ cityName: val }).then(
+        data => {
+          // console.log("Got locations : ", data)
+          setLocations(data);
+        }
+      );
+    } else if (val.length == 0) {
+      setLocations([]);
+    }
+  };
+
+
+  // CALL SEARCH DATA EVERY 1200 SEOCENDS DEALY WHEN USER START TYPING
+  const debounceHandleSearch = useCallback(debounce(handleSearch, 1200), []);
 
   return (
     <View style={homeStyles.container}>
@@ -26,11 +99,19 @@ export default function HomeScreen({ navigation }) {
       {/* Background Image */}
       <Image
         blurRadius={70}
-        source={require('../assets/bg.jpg')}
+        source={require("../assets/bg.jpg")}
         style={homeStyles.fullScreenImage}
       />
 
-      <SafeAreaView style={{ marginVertical: 10, flex: 1, flexDirection: 'column', justifyContent: 'space-evenly' }}>
+      {
+        loading ? <View style = {homeStyles.loadingContainer}>
+
+          <Progress.CircleSnail thickness={10} size={100} color="#0bb3b2"/>
+
+        </View> :  
+    
+
+      <SafeAreaView style={{ marginVertical: 5, flex: 1, flexDirection: 'column', justifyContent: 'space-evenly' }}>
 
         {/* Search Section */}
         <View style={[homeStyles.searchSection]}>
@@ -39,6 +120,7 @@ export default function HomeScreen({ navigation }) {
 
             {
               showSearch ? (<TextInput
+                onChangeText={(val) => debounceHandleSearch(val)}
                 placeholder="Search city..."
                 cursorColor={'white'}
                 placeholderTextColor="lightgray"
@@ -49,7 +131,7 @@ export default function HomeScreen({ navigation }) {
             {/* Search Icon */}
             <TouchableOpacity
               style={[homeStyles.searchIconContainer, { backgroundColor: theme.bgWhite(0.3) }]}
-              onPress={() => toggleSearch(!showSearch)}
+              onPress={() => toggleSearchSection()}
             >
               <Ionicons name="search" size={24} color="white" />
             </TouchableOpacity>
@@ -74,7 +156,7 @@ export default function HomeScreen({ navigation }) {
                           >
                             <FontAwesome name="map-pin" size={21} color="grey" />
                             <Text style={homeStyles.resultText}>
-                              London, United Kingdom
+                              {loc?.name}, {loc?.country}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -92,179 +174,143 @@ export default function HomeScreen({ navigation }) {
 
           {/* Location Text */}
           <Text style={[homeStyles.locationText]}>
-            London,
+            {location?.name},
             <Text style={homeStyles.subLoationText}>
-              United Kingdom
+              {" " + location?.country}
             </Text>
           </Text>
 
 
 
-            {/*weather image*/}
-            <View style={homeStyles.weatherImageContainer}>
-              <Image source={require('../assets/weatherImages/partlyCloudy.png') }
-                style = {homeStyles.weatherImage}
-              />
+          {/*weather image*/}
+          <View style={homeStyles.weatherImageContainer}>
+            <Image source={weatherImages[current?.condition?.text]}
+              style={homeStyles.weatherImage}
+            />
+          </View>
+
+
+          {/*degree celsius*/}
+          <View style={{ marginTop: 20, marginBottom: 50, alignItems: 'center' }}>
+
+            <Text style={[homeStyles.locationText, { fontSize: 50 }]}>
+              {current?.temp_c}&#176;c</Text>
+
+            <Text style={homeStyles.weatherConditionText}>
+              {current?.condition?.text}
+            </Text>
+
+
+          </View>
+
+
+          {/*other stats*/}
+          <View style={homeStyles.otherStat}>
+
+
+
+            <View style={homeStyles.statImageLable}>
+
+              <Image source={require("../assets/statImages/wind.png")} style={homeStyles.statImage} />
+
+              <Text style={homeStyles.statText}>{current?.wind_kph}km</Text>
+
             </View>
 
 
-            {/*degree celsius*/}
-            <View style = {{marginTop: 20, marginBottom:50, alignItems: 'center'}}>
+            <View style={homeStyles.statImageLable}>
 
-              <Text style = {[homeStyles.locationText, {fontSize: 50}]}>
-                23&#176;
+              <Image source={require("../assets/statImages/drop.png")} style={homeStyles.statImage} />
+
+              <Text style={homeStyles.statText}>{current?.humidity}%</Text>
+
+            </View>
+
+
+            <View style={homeStyles.statImageLable}>
+
+              <Image source={require("../assets/statImages/sun.png")} style={homeStyles.statImage} />
+
+              <Text style={homeStyles.statText}>{forecast?.forecastday[0]?.astro?.sunrise}</Text>
+
+            </View>
+
+          </View>
+
+          {/*forecast section for next coming  days*/}
+          <View style={homeStyles.nextDayForecastSection} >
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginLeft: 20 }}>
+
+              <FontAwesome name='calendar' color={'lightgray'} size={18} />
+
+              <Text style={[homeStyles.statText, { fontSize: 16 }]}>
+                Daily Forecast
               </Text>
 
-              <Text style = {homeStyles.weatherConditionText}>
-                Partly Cloudy
-              </Text>
-
             </View>
 
 
-            {/*other stats*/}
-            <View style={homeStyles.otherStat}> 
+            {/*horizontal forecast scroll view*/}
+            <ScrollView
+              horizontal
+              contentContainerStyle={{ marginHorizontal: 15 }}
+              showsHorizontalScrollIndicator={false}
+            >
 
-              <View style={homeStyles.statImageLable}>
 
-                <Image source={require("../assets/statImages/wind.png")} style={homeStyles.statImage}/>
+              {
+                forecast?.forecastday?.map(
+                  (data, index) => {
 
-                <Text style={homeStyles.statText}>22km</Text>
 
-              </View>
-              
+                  let date = new Date(data?.date);
+                  let options = {weekday: 'long'};
+                  let dayName = date.toLocaleDateString('en-US', options);
+                  dayName = dayName.split(',')[0]
 
-              <View style={homeStyles.statImageLable}>
 
-                <Image source={require("../assets/statImages/drop.png")} style={homeStyles.statImage}/>
+                    return (
+                      <View 
+                      key={index}
+                      style={[homeStyles.nextForecastBox, { backgroundColor: theme.bgWhite(0.15) }]} >
 
-                <Text style={homeStyles.statText}>23%</Text>
+                        <Image source={weatherImages[data?.day?.condition?.text]} style={homeStyles.nextForecastImage} />
 
-              </View>
+                        <Text style={[homeStyles.statText, {fontSize: 14, letterSpacing: 0.5}]}>{dayName}</Text>
 
 
-              <View style={homeStyles.statImageLable}>
+                        <Text style={[homeStyles.statText, { fontWeight: 'bold', fontSize: 18}]} >23&#176;</Text>
 
-                <Image source={require("../assets/statImages/sun.png")} style={homeStyles.statImage}/>
+                      </View>
+                    )
+                  }
+                )
+              }
 
-                <Text style={homeStyles.statText}>6:05 AM</Text>
 
-              </View>
 
-            </View>
+            </ScrollView>
 
-            {/*forecast section for next coming  days*/}
-            <View style={homeStyles.nextDayForecastSection} >
-              
-              <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginLeft: 20}}>
 
-                <FontAwesome name='calendar' color={'lightgray'} size={18}/>
-
-                <Text style={[homeStyles.statText, {fontSize: 16}]}>
-                  Daily Forecast
-                </Text>
-
-              </View>
-
-
-              {/*horizontal forecast scroll view*/}
-              <ScrollView
-                horizontal
-                contentContainerStyle = {{marginHorizontal: 15}}
-                showsHorizontalScrollIndicator = {false}
-              >
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-                <View style={[homeStyles.nextForecastBox, {backgroundColor: theme.bgWhite(0.15)}]} >
-
-                  <Image source={require("../assets/weatherImages/partlyCloudy.png")} style = {homeStyles.nextForecastImage} />
-
-                  <Text style={homeStyles.statText}>Monday</Text>
-
-
-                  <Text style={[homeStyles.statText, {fontWeight: 'bold'}]} >23&#176;</Text>
-
-                </View>
-
-              </ScrollView>
-
-
-            </View>
+          </View>
 
         </View>
 
       </SafeAreaView>
+      }
 
     </View>
   );
 }
 
 const homeStyles = StyleSheet.create({
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent:'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
   },
@@ -367,6 +413,7 @@ const homeStyles = StyleSheet.create({
     fontSize: 20,
     color: 'white',
     letterSpacing: 2,
+    marginVertical: 6,
     textAlign: 'center',
   },
 
@@ -375,7 +422,7 @@ const homeStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginVertical: 10,
-    marginHorizontal: 10,
+    marginHorizontal: 20,
   },
 
   statImageLable: {
@@ -394,6 +441,7 @@ const homeStyles = StyleSheet.create({
 
   statText: {
     fontSize: 17,
+    fontWeight: '600',
     marginHorizontal: 10,
     color: 'lightgray',
     letterSpacing: 2,
@@ -410,8 +458,10 @@ const homeStyles = StyleSheet.create({
   nextForecastBox: {
     flex: 'column',
     height: 120,
+    width: 100,
     justifyContent: 'space-evenly',
     paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: 'center',
     marginRight: 15,
     borderRadius: 20,
