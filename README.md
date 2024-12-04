@@ -40,3 +40,5 @@ Weather-Casting is a React Native application that provides detailed weather inf
 
 ### Video Preview 🎥
 
+https://github.com/user-attachments/assets/69dc23a6-40bd-48f0-a695-627bae107909
+
